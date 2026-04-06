@@ -1,240 +1,456 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useCart } from '../lib/CartContext'
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useCartStore } from '../store/cartStore';
+import { supabase } from '../lib/supabase';
+import { 
+  CreditCard, 
+  Smartphone, 
+  Banknote, 
+  MapPin, 
+  User, 
+  Phone, 
+  Home,
+  ArrowLeft,
+  CheckCircle
+} from 'lucide-react';
 
 export default function Checkout() {
-  const { items, total, clear } = useCart()
-  const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({
-    name: '', phone: '', address: '',
-    notes: '', payment: 'pix',
-    cardType: 'credito', troco: ''
-  })
+  const navigate = useNavigate();
+  const { items, total, clearCart } = useCartStore();
+  
+  const [loading, setLoading] = useState(false);
+  const [formaPagamento, setFormaPagamento] = useState('pix');
+  const [tipoPedido, setTipoPedido] = useState('delivery');
+  const [trocoPara, setTrocoPara] = useState('');
+  
+  // Dados do cliente
+  const [nome, setNome] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [email, setEmail] = useState('');
+  
+  // Endereço (só se for delivery)
+  const [rua, setRua] = useState('');
+  const [numero, setNumero] = useState('');
+  const [bairro, setBairro] = useState('');
+  const [complemento, setComplemento] = useState('');
+  const [cep, setCep] = useState('');
 
-  const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }))
+  const taxaEntrega = tipoPedido === 'delivery' ? 5.00 : 0;
+  const totalComTaxa = total + taxaEntrega;
 
-  function isValidUUID(str) {
-    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
-  }
-
-  async function handleSubmit() {
-    if (!form.name || !form.phone || !form.address) {
-      alert('Preencha nome, telefone e endereço')
-      return
+  const handleFinalizarPedido = async (e) => {
+    e.preventDefault();
+    
+    if (items.length === 0) {
+      alert('Carrinho vazio!');
+      return;
     }
-    if (form.payment === 'dinheiro' && !form.troco) {
-      alert('Informe o valor do troco')
-      return
-    }
-    setLoading(true)
+
+    setLoading(true);
+
     try {
-      let userId = null
-
-      const { data: existing } = await supabase
-        .from('users')
+      // 1. Buscar ou criar cliente
+      let clienteId = null;
+      
+      const { data: clienteExistente } = await supabase
+        .from('clientes')
         .select('id')
-        .eq('phone', form.phone)
-        .maybeSingle()
+        .eq('telefone', telefone)
+        .single();
 
-      if (existing) {
-        userId = existing.id
+      if (clienteExistente) {
+        clienteId = clienteExistente.id;
+        
+        // Atualizar dados do cliente
+        await supabase
+          .from('clientes')
+          .update({
+            nome,
+            email: email || null,
+            ultima_compra: new Date().toISOString(),
+            total_pedidos: supabase.raw('total_pedidos + 1'),
+            total_gasto: supabase.raw(`total_gasto + ${totalComTaxa}`)
+          })
+          .eq('id', clienteId);
       } else {
-        const { data: newUser, error: userError } = await supabase
-          .from('users')
-          .insert({ name: form.name, phone: form.phone })
-          .select('id')
-          .single()
-        if (userError) throw userError
-        userId = newUser.id
+        // Criar novo cliente
+        const { data: novoCliente, error: erroCliente } = await supabase
+          .from('clientes')
+          .insert({
+            nome,
+            telefone,
+            email: email || null,
+            total_pedidos: 1,
+            total_gasto: totalComTaxa,
+            primeira_compra: new Date().toISOString(),
+            ultima_compra: new Date().toISOString()
+          })
+          .select()
+          .single();
+
+        if (erroCliente) throw erroCliente;
+        clienteId = novoCliente.id;
       }
 
-      const paymentDetail = form.payment === 'cartao'
-        ? `Cartão ${form.cardType}`
-        : form.payment === 'dinheiro'
-        ? `Dinheiro — troco para R$ ${form.troco}`
-        : 'PIX'
+      // 2. Preparar dados do endereço (se delivery)
+      const enderecoData = tipoPedido === 'delivery' ? {
+        rua,
+        numero,
+        bairro,
+        complemento,
+        cep
+      } : null;
 
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
+      // 3. Preparar itens do pedido
+      const itensFormatados = items.map(item => ({
+        produto_id: item.id,
+        nome: item.nome,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco,
+        tamanho: item.tamanho || null,
+        adicionais: item.adicionais || [],
+        observacao: item.observacao || null,
+        subtotal: item.preco * item.quantidade
+      }));
+
+      // 4. Criar pedido
+      const { data: pedido, error: erroPedido } = await supabase
+        .from('pedidos')
         .insert({
-          user_id: userId,
-          total,
-          address: form.address,
-          notes: form.notes,
-          payment_method: paymentDetail,
-          status: 'pending'
+          cliente_id: clienteId,
+          cliente_nome: nome,
+          cliente_telefone: telefone,
+          cliente_endereco: enderecoData,
+          
+          itens: itensFormatados,
+          subtotal: total,
+          taxa_entrega: taxaEntrega,
+          desconto: 0,
+          total: totalComTaxa,
+          
+          forma_pagamento: formaPagamento,
+          troco_para: formaPagamento === 'dinheiro' && trocoPara ? parseFloat(trocoPara) : null,
+          status_pagamento: 'pendente',
+          
+          tipo_pedido: tipoPedido,
+          status: 'pendente',
+          
+          whatsapp_enviado: false,
+          impresso: false,
+          nfe_emitida: false,
+          is_clube: false
         })
-        .select('id')
-        .single()
+        .select()
+        .single();
 
-      if (orderError) throw orderError
+      if (erroPedido) throw erroPedido;
 
-      const orderItems = items.map(item => ({
-        order_id: order.id,
-        product_id: isValidUUID(item.id) ? item.id : null,
-        quantity: item.qty,
-        unit_price: item.price,
-      }))
+      // 5. Limpar carrinho e redirecionar
+      clearCart();
+      navigate('/pedido-confirmado', { 
+        state: { 
+          numeroPedido: pedido.numero_pedido,
+          total: totalComTaxa 
+        } 
+      });
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems)
-
-      if (itemsError) throw itemsError
-
-      await supabase
-        .from('users')
-        .update({ last_order_at: new Date().toISOString() })
-        .eq('id', userId)
-
-      clear()
-      navigate('/pedido-confirmado', {
-        state: {
-          orderId: order.id,
-          name: form.name,
-          payment: form.payment,
-          troco: form.troco,
-          cardType: form.cardType
-        }
-      })
-    } catch (err) {
-      console.error(err)
-      alert('Erro: ' + (err.message || 'Tente novamente'))
+    } catch (error) {
+      console.error('Erro ao finalizar pedido:', error);
+      alert('Erro ao finalizar pedido. Tente novamente!');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false)
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Carrinho Vazio</h2>
+          <button
+            onClick={() => navigate('/')}
+            className="bg-[#E8741A] text-white px-6 py-3 rounded-lg hover:bg-[#d66515] transition-colors"
+          >
+            Voltar ao Cardápio
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: '120px' }}>
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4"
+          >
+            <ArrowLeft size={20} />
+            Voltar
+          </button>
+          <h1 className="text-3xl font-bold text-gray-800">Finalizar Pedido</h1>
+        </div>
 
-      <div style={{ background: 'linear-gradient(135deg, #8B1A0A, #E8741A)', padding: '20px 16px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button onClick={() => navigate('/carrinho')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '36px', height: '36px', borderRadius: '50%', fontSize: '18px', cursor: 'pointer' }}>←</button>
-        <h1 style={{ fontSize: '20px', fontWeight: '800' }}>Finalizar Pedido</h1>
-      </div>
-
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-        <div className="card" style={{ padding: '16px' }}>
-          <p style={{ fontWeight: '700', fontSize: '15px', marginBottom: '14px' }}>👤 Seus dados</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <input placeholder="Seu nome completo" value={form.name} onChange={e => set('name', e.target.value)} />
-            <input placeholder="WhatsApp com DDD — ex: 34999990000" value={form.phone} onChange={e => set('phone', e.target.value)} type="tel" />
+        <form onSubmit={handleFinalizarPedido} className="space-y-6">
+          {/* Tipo de Pedido */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Tipo de Pedido</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <button
+                type="button"
+                onClick={() => setTipoPedido('delivery')}
+                className={`p-4 rounded-lg border-2 transition-colors ${
+                  tipoPedido === 'delivery'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <MapPin className="mx-auto mb-2" size={24} />
+                <span className="font-medium">Delivery</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoPedido('retirada')}
+                className={`p-4 rounded-lg border-2 transition-colors ${
+                  tipoPedido === 'retirada'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Home className="mx-auto mb-2" size={24} />
+                <span className="font-medium">Retirada</span>
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div className="card" style={{ padding: '16px' }}>
-          <p style={{ fontWeight: '700', fontSize: '15px', marginBottom: '14px' }}>📍 Endereço de entrega</p>
-          <textarea
-            placeholder="Rua, número, bairro, complemento..."
-            value={form.address}
-            onChange={e => set('address', e.target.value)}
-            rows={3}
-            style={{ width: '100%', padding: '12px', border: '1.5px solid #ddd', borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none' }}
-          />
-        </div>
-
-        <div className="card" style={{ padding: '16px' }}>
-          <p style={{ fontWeight: '700', fontSize: '15px', marginBottom: '14px' }}>💳 Forma de pagamento</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-
-            <button onClick={() => set('payment', 'pix')}
-              style={{ padding: '14px', borderRadius: '10px', border: `2px solid ${form.payment === 'pix' ? '#E8741A' : '#eee'}`, background: form.payment === 'pix' ? '#FFF8F4' : 'white', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Dados Pessoais */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Seus Dados</h2>
+            <div className="space-y-4">
               <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', color: form.payment === 'pix' ? '#E8741A' : '#333' }}>💚 PIX</p>
-                <p style={{ fontSize: '12px', color: '#777' }}>Aprovação instantânea</p>
-              </div>
-              {form.payment === 'pix' && <span style={{ color: '#E8741A', fontSize: '18px' }}>✓</span>}
-            </button>
-
-            <button onClick={() => set('payment', 'cartao')}
-              style={{ padding: '14px', borderRadius: '10px', border: `2px solid ${form.payment === 'cartao' ? '#E8741A' : '#eee'}`, background: form.payment === 'cartao' ? '#FFF8F4' : 'white', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', color: form.payment === 'cartao' ? '#E8741A' : '#333' }}>💳 Cartão na entrega</p>
-                <p style={{ fontSize: '12px', color: '#777' }}>Débito ou crédito</p>
-              </div>
-              {form.payment === 'cartao' && <span style={{ color: '#E8741A', fontSize: '18px' }}>✓</span>}
-            </button>
-
-            {form.payment === 'cartao' && (
-              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-                {['debito', 'credito'].map(type => (
-                  <button key={type} onClick={() => set('cardType', type)}
-                    style={{ flex: 1, padding: '12px', borderRadius: '10px', border: `2px solid ${form.cardType === type ? '#E8741A' : '#eee'}`, background: form.cardType === type ? '#FFF8F4' : 'white', fontWeight: '700', fontSize: '14px', color: form.cardType === type ? '#E8741A' : '#555', cursor: 'pointer' }}>
-                    {type === 'debito' ? '💳 Débito' : '💳 Crédito'}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <button onClick={() => set('payment', 'dinheiro')}
-              style={{ padding: '14px', borderRadius: '10px', border: `2px solid ${form.payment === 'dinheiro' ? '#E8741A' : '#eee'}`, background: form.payment === 'dinheiro' ? '#FFF8F4' : 'white', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: '700', fontSize: '14px', color: form.payment === 'dinheiro' ? '#E8741A' : '#333' }}>💵 Dinheiro na entrega</p>
-                <p style={{ fontSize: '12px', color: '#777' }}>Informe o valor para troco</p>
-              </div>
-              {form.payment === 'dinheiro' && <span style={{ color: '#E8741A', fontSize: '18px' }}>✓</span>}
-            </button>
-
-            {form.payment === 'dinheiro' && (
-              <div style={{ marginTop: '4px' }}>
-                <p style={{ fontSize: '13px', color: '#555', marginBottom: '8px', fontWeight: '600' }}>
-                  💰 Troco para quanto? (pedido: R$ {total.toFixed(2).replace('.', ',')})
-                </p>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                  {['20', '50', '100', '200'].map(val => (
-                    <button key={val} onClick={() => set('troco', val)}
-                      style={{ padding: '10px 16px', borderRadius: '10px', border: `2px solid ${form.troco === val ? '#E8741A' : '#eee'}`, background: form.troco === val ? '#FFF8F4' : 'white', fontWeight: '700', color: form.troco === val ? '#E8741A' : '#555', cursor: 'pointer', fontSize: '14px' }}>
-                      R$ {val}
-                    </button>
-                  ))}
-                </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <User className="inline mr-2" size={16} />
+                  Nome Completo *
+                </label>
                 <input
-                  placeholder="Ou digite o valor exato"
-                  value={form.troco}
-                  onChange={e => set('troco', e.target.value)}
-                  type="number"
-                  style={{ padding: '12px', border: '1.5px solid #ddd', borderRadius: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
+                  type="text"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                  required
                 />
               </div>
-            )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <Phone className="inline mr-2" size={16} />
+                  WhatsApp *
+                </label>
+                <input
+                  type="tel"
+                  value={telefone}
+                  onChange={(e) => setTelefone(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                  required
+                />
+              </div>
 
-          </div>
-        </div>
-
-        <div className="card" style={{ padding: '16px' }}>
-          <p style={{ fontWeight: '700', fontSize: '15px', marginBottom: '8px' }}>💬 Observação geral</p>
-          <textarea
-            placeholder="Alguma instrução para a entrega?"
-            value={form.notes}
-            onChange={e => set('notes', e.target.value)}
-            rows={2}
-            style={{ width: '100%', padding: '12px', border: '1.5px solid #ddd', borderRadius: '10px', fontSize: '14px', fontFamily: 'inherit', resize: 'none', outline: 'none' }}
-          />
-        </div>
-
-        <div className="card" style={{ padding: '16px' }}>
-          <p style={{ fontWeight: '700', fontSize: '15px', marginBottom: '12px' }}>🧾 Resumo do pedido</p>
-          {items.map((item, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
-              <span style={{ color: '#555' }}>{item.qty}x {item.name}</span>
-              <span style={{ fontWeight: '600' }}>R$ {(item.price * item.qty).toFixed(2).replace('.', ',')}</span>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email (opcional)
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                />
+              </div>
             </div>
-          ))}
-          <div style={{ borderTop: '1px solid #eee', paddingTop: '10px', marginTop: '6px', display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '800' }}>
-            <span>Total</span>
-            <span style={{ color: '#E8741A' }}>R$ {total.toFixed(2).replace('.', ',')}</span>
           </div>
-        </div>
 
-      </div>
+          {/* Endereço (só se delivery) */}
+          {tipoPedido === 'delivery' && (
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">Endereço de Entrega</h2>
+              <div className="space-y-4">
+                <div className="grid grid-cols-4 gap-4">
+                  <div className="col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Rua *</label>
+                    <input
+                      type="text"
+                      value={rua}
+                      onChange={(e) => setRua(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                      required={tipoPedido === 'delivery'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Número *</label>
+                    <input
+                      type="text"
+                      value={numero}
+                      onChange={(e) => setNumero(e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                      required={tipoPedido === 'delivery'}
+                    />
+                  </div>
+                </div>
 
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '480px', padding: '16px', background: 'white', borderTop: '1px solid #eee' }}>
-        <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
-          {loading ? '⏳ Enviando pedido...' : `✅ Confirmar pedido • R$ ${total.toFixed(2).replace('.', ',')}`}
-        </button>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Bairro *</label>
+                  <input
+                    type="text"
+                    value={bairro}
+                    onChange={(e) => setBairro(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                    required={tipoPedido === 'delivery'}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Complemento</label>
+                  <input
+                    type="text"
+                    value={complemento}
+                    onChange={(e) => setComplemento(e.target.value)}
+                    placeholder="Apto, bloco, etc..."
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">CEP *</label>
+                  <input
+                    type="text"
+                    value={cep}
+                    onChange={(e) => setCep(e.target.value)}
+                    placeholder="00000-000"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                    required={tipoPedido === 'delivery'}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Forma de Pagamento */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Forma de Pagamento</h2>
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setFormaPagamento('pix')}
+                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                  formaPagamento === 'pix'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Smartphone size={24} />
+                <span className="font-medium">PIX</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormaPagamento('credito')}
+                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                  formaPagamento === 'credito'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <CreditCard size={24} />
+                <span className="font-medium">Cartão de Crédito</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormaPagamento('debito')}
+                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                  formaPagamento === 'debito'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <CreditCard size={24} />
+                <span className="font-medium">Cartão de Débito</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setFormaPagamento('dinheiro')}
+                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
+                  formaPagamento === 'dinheiro'
+                    ? 'border-[#E8741A] bg-orange-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <Banknote size={24} />
+                <span className="font-medium">Dinheiro</span>
+              </button>
+
+              {formaPagamento === 'dinheiro' && (
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Troco para quanto? (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    value={trocoPara}
+                    onChange={(e) => setTrocoPara(e.target.value)}
+                    placeholder="R$ 50,00"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Resumo do Pedido */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4">Resumo do Pedido</h2>
+            <div className="space-y-3">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal</span>
+                <span>R$ {total.toFixed(2)}</span>
+              </div>
+              {tipoPedido === 'delivery' && (
+                <div className="flex justify-between text-gray-600">
+                  <span>Taxa de Entrega</span>
+                  <span>R$ {taxaEntrega.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="border-t pt-3 flex justify-between text-xl font-bold text-gray-800">
+                <span>Total</span>
+                <span className="text-[#E8741A]">R$ {totalComTaxa.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Botão Finalizar */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-[#E8741A] hover:bg-[#d66515] text-white font-bold py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                Finalizando...
+              </>
+            ) : (
+              <>
+                <CheckCircle size={24} />
+                Finalizar Pedido
+              </>
+            )}
+          </button>
+        </form>
       </div>
     </div>
-  )
+  );
 }
