@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Home from './pages/Home';
+import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import OrderSuccess from './pages/OrderSuccess';
+import Clube from './pages/Clube';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminPedidos from './pages/admin/AdminPedidos';
@@ -8,8 +12,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rota pública */}
+        {/* Rotas públicas */}
         <Route path="/" element={<Home />} />
+        <Route path="/carrinho" element={<Cart />} />
+        <Route path="/checkout" element={<Checkout />} />
+        <Route path="/pedido-confirmado" element={<OrderSuccess />} />
+        <Route path="/clube" element={<Clube />} />
         
         {/* Login admin */}
         <Route path="/admin/login" element={<AdminLogin />} />

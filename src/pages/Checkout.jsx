@@ -3,16 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useCartStore } from '../store/cartStore';
 import { supabase } from '../lib/supabase';
 import { 
-  CreditCard, 
-  Smartphone, 
-  Banknote, 
+  ArrowLeft,
   MapPin, 
   User, 
   Phone, 
   Home,
-  ArrowLeft,
+  CreditCard,
+  Smartphone,
+  Banknote,
+  Truck,
+  Store,
   CheckCircle
 } from 'lucide-react';
+import BottomNav from '../components/BottomNav';
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -23,12 +26,10 @@ export default function Checkout() {
   const [tipoPedido, setTipoPedido] = useState('delivery');
   const [trocoPara, setTrocoPara] = useState('');
   
-  // Dados do cliente
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [email, setEmail] = useState('');
   
-  // Endereço (só se for delivery)
   const [rua, setRua] = useState('');
   const [numero, setNumero] = useState('');
   const [bairro, setBairro] = useState('');
@@ -49,7 +50,6 @@ export default function Checkout() {
     setLoading(true);
 
     try {
-      // 1. Buscar ou criar cliente
       let clienteId = null;
       
       const { data: clienteExistente } = await supabase
@@ -60,8 +60,6 @@ export default function Checkout() {
 
       if (clienteExistente) {
         clienteId = clienteExistente.id;
-        
-        // Atualizar dados do cliente
         await supabase
           .from('clientes')
           .update({
@@ -73,7 +71,6 @@ export default function Checkout() {
           })
           .eq('id', clienteId);
       } else {
-        // Criar novo cliente
         const { data: novoCliente, error: erroCliente } = await supabase
           .from('clientes')
           .insert({
@@ -92,16 +89,10 @@ export default function Checkout() {
         clienteId = novoCliente.id;
       }
 
-      // 2. Preparar dados do endereço (se delivery)
       const enderecoData = tipoPedido === 'delivery' ? {
-        rua,
-        numero,
-        bairro,
-        complemento,
-        cep
+        rua, numero, bairro, complemento, cep
       } : null;
 
-      // 3. Preparar itens do pedido
       const itensFormatados = items.map(item => ({
         produto_id: item.id,
         nome: item.nome,
@@ -113,7 +104,6 @@ export default function Checkout() {
         subtotal: item.preco * item.quantidade
       }));
 
-      // 4. Criar pedido
       const { data: pedido, error: erroPedido } = await supabase
         .from('pedidos')
         .insert({
@@ -121,20 +111,16 @@ export default function Checkout() {
           cliente_nome: nome,
           cliente_telefone: telefone,
           cliente_endereco: enderecoData,
-          
           itens: itensFormatados,
           subtotal: total,
           taxa_entrega: taxaEntrega,
           desconto: 0,
           total: totalComTaxa,
-          
           forma_pagamento: formaPagamento,
           troco_para: formaPagamento === 'dinheiro' && trocoPara ? parseFloat(trocoPara) : null,
           status_pagamento: 'pendente',
-          
           tipo_pedido: tipoPedido,
           status: 'pendente',
-          
           whatsapp_enviado: false,
           impresso: false,
           nfe_emitida: false,
@@ -145,7 +131,6 @@ export default function Checkout() {
 
       if (erroPedido) throw erroPedido;
 
-      // 5. Limpar carrinho e redirecionar
       clearCart();
       navigate('/pedido-confirmado', { 
         state: { 
@@ -164,13 +149,10 @@ export default function Checkout() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center p-4">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Carrinho Vazio</h2>
-          <button
-            onClick={() => navigate('/')}
-            className="bg-[#E8741A] text-white px-6 py-3 rounded-lg hover:bg-[#d66515] transition-colors"
-          >
+          <button onClick={() => navigate('/')} className="btn-primary">
             Voltar ao Cardápio
           </button>
         </div>
@@ -179,278 +161,238 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-800 mb-4"
-          >
-            <ArrowLeft size={20} />
-            Voltar
+    <div className="min-h-screen bg-[#F5F5F5] pb-24">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="container-mobile py-4 flex items-center gap-4">
+          <button onClick={() => navigate(-1)}>
+            <ArrowLeft size={24} className="text-[#1A1A1A]" />
           </button>
-          <h1 className="text-3xl font-bold text-gray-800">Finalizar Pedido</h1>
+          <h1 className="text-xl font-bold">Finalizar Pedido</h1>
         </div>
+      </header>
 
-        <form onSubmit={handleFinalizarPedido} className="space-y-6">
-          {/* Tipo de Pedido */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Tipo de Pedido</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => setTipoPedido('delivery')}
-                className={`p-4 rounded-lg border-2 transition-colors ${
-                  tipoPedido === 'delivery'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <MapPin className="mx-auto mb-2" size={24} />
-                <span className="font-medium">Delivery</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setTipoPedido('retirada')}
-                className={`p-4 rounded-lg border-2 transition-colors ${
-                  tipoPedido === 'retirada'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Home className="mx-auto mb-2" size={24} />
-                <span className="font-medium">Retirada</span>
-              </button>
+      <form onSubmit={handleFinalizarPedido} className="container-mobile py-6 space-y-4">
+        {/* Tipo de Pedido */}
+        <section className="card p-5">
+          <h2 className="text-lg font-bold mb-4">Tipo de Pedido</h2>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setTipoPedido('delivery')}
+              className={`p-4 rounded-2xl border-2 transition-all ${
+                tipoPedido === 'delivery'
+                  ? 'border-[#E61919] bg-red-50'
+                  : 'border-gray-200'
+              }`}
+            >
+              <Truck className={`mx-auto mb-2 ${tipoPedido === 'delivery' ? 'text-[#E61919]' : 'text-gray-400'}`} size={32} />
+              <span className="font-semibold text-sm">Delivery</span>
+              <p className="text-xs text-gray-500 mt-1">R$ 5,00</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipoPedido('retirada')}
+              className={`p-4 rounded-2xl border-2 transition-all ${
+                tipoPedido === 'retirada'
+                  ? 'border-[#E61919] bg-red-50'
+                  : 'border-gray-200'
+              }`}
+            >
+              <Store className={`mx-auto mb-2 ${tipoPedido === 'retirada' ? 'text-[#E61919]' : 'text-gray-400'}`} size={32} />
+              <span className="font-semibold text-sm">Retirada</span>
+              <p className="text-xs text-gray-500 mt-1">Grátis</p>
+            </button>
+          </div>
+        </section>
+
+        {/* Dados Pessoais */}
+        <section className="card p-5">
+          <h2 className="text-lg font-bold mb-4">Seus Dados</h2>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <User className="inline mr-2" size={16} />
+                Nome Completo *
+              </label>
+              <input
+                type="text"
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <Phone className="inline mr-2" size={16} />
+                WhatsApp *
+              </label>
+              <input
+                type="tel"
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                placeholder="(00) 00000-0000"
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email (opcional)
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+              />
             </div>
           </div>
+        </section>
 
-          {/* Dados Pessoais */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Seus Dados</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <User className="inline mr-2" size={16} />
-                  Nome Completo *
-                </label>
+        {/* Endereço */}
+        {tipoPedido === 'delivery' && (
+          <section className="card p-5">
+            <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+              <MapPin size={20} className="text-[#E61919]" />
+              Endereço de Entrega
+            </h2>
+            <div className="space-y-3">
+              <div className="grid grid-cols-4 gap-3">
                 <input
                   type="text"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                  required
+                  value={rua}
+                  onChange={(e) => setRua(e.target.value)}
+                  placeholder="Rua"
+                  className="col-span-3 px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                  required={tipoPedido === 'delivery'}
                 />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  <Phone className="inline mr-2" size={16} />
-                  WhatsApp *
-                </label>
                 <input
-                  type="tel"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  placeholder="(00) 00000-0000"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                  required
+                  type="text"
+                  value={numero}
+                  onChange={(e) => setNumero(e.target.value)}
+                  placeholder="Nº"
+                  className="px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                  required={tipoPedido === 'delivery'}
                 />
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email (opcional)
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                />
-              </div>
+              <input
+                type="text"
+                value={bairro}
+                onChange={(e) => setBairro(e.target.value)}
+                placeholder="Bairro"
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                required={tipoPedido === 'delivery'}
+              />
+
+              <input
+                type="text"
+                value={complemento}
+                onChange={(e) => setComplemento(e.target.value)}
+                placeholder="Complemento (opcional)"
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+              />
+
+              <input
+                type="text"
+                value={cep}
+                onChange={(e) => setCep(e.target.value)}
+                placeholder="CEP"
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+                required={tipoPedido === 'delivery'}
+              />
             </div>
-          </div>
+          </section>
+        )}
 
-          {/* Endereço (só se delivery) */}
-          {tipoPedido === 'delivery' && (
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Endereço de Entrega</h2>
-              <div className="space-y-4">
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="col-span-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Rua *</label>
-                    <input
-                      type="text"
-                      value={rua}
-                      onChange={(e) => setRua(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                      required={tipoPedido === 'delivery'}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Número *</label>
-                    <input
-                      type="text"
-                      value={numero}
-                      onChange={(e) => setNumero(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                      required={tipoPedido === 'delivery'}
-                    />
-                  </div>
-                </div>
+        {/* Forma de Pagamento */}
+        <section className="card p-5">
+          <h2 className="text-lg font-bold mb-4">Pagamento</h2>
+          <div className="space-y-2">
+            {[
+              { id: 'pix', icon: Smartphone, label: 'PIX' },
+              { id: 'credito', icon: CreditCard, label: 'Crédito' },
+              { id: 'debito', icon: CreditCard, label: 'Débito' },
+              { id: 'dinheiro', icon: Banknote, label: 'Dinheiro' }
+            ].map((forma) => {
+              const Icon = forma.icon;
+              return (
+                <button
+                  key={forma.id}
+                  type="button"
+                  onClick={() => setFormaPagamento(forma.id)}
+                  className={`w-full p-4 rounded-xl border-2 flex items-center gap-3 transition-all ${
+                    formaPagamento === forma.id
+                      ? 'border-[#E61919] bg-red-50'
+                      : 'border-gray-200'
+                  }`}
+                >
+                  <Icon size={24} className={formaPagamento === forma.id ? 'text-[#E61919]' : 'text-gray-400'} />
+                  <span className="font-semibold">{forma.label}</span>
+                </button>
+              );
+            })}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Bairro *</label>
-                  <input
-                    type="text"
-                    value={bairro}
-                    onChange={(e) => setBairro(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                    required={tipoPedido === 'delivery'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Complemento</label>
-                  <input
-                    type="text"
-                    value={complemento}
-                    onChange={(e) => setComplemento(e.target.value)}
-                    placeholder="Apto, bloco, etc..."
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">CEP *</label>
-                  <input
-                    type="text"
-                    value={cep}
-                    onChange={(e) => setCep(e.target.value)}
-                    placeholder="00000-000"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                    required={tipoPedido === 'delivery'}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Forma de Pagamento */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Forma de Pagamento</h2>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => setFormaPagamento('pix')}
-                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                  formaPagamento === 'pix'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Smartphone size={24} />
-                <span className="font-medium">PIX</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFormaPagamento('credito')}
-                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                  formaPagamento === 'credito'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <CreditCard size={24} />
-                <span className="font-medium">Cartão de Crédito</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFormaPagamento('debito')}
-                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                  formaPagamento === 'debito'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <CreditCard size={24} />
-                <span className="font-medium">Cartão de Débito</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFormaPagamento('dinheiro')}
-                className={`w-full p-4 rounded-lg border-2 flex items-center gap-3 transition-colors ${
-                  formaPagamento === 'dinheiro'
-                    ? 'border-[#E8741A] bg-orange-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Banknote size={24} />
-                <span className="font-medium">Dinheiro</span>
-              </button>
-
-              {formaPagamento === 'dinheiro' && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Troco para quanto? (opcional)
-                  </label>
-                  <input
-                    type="number"
-                    value={trocoPara}
-                    onChange={(e) => setTrocoPara(e.target.value)}
-                    placeholder="R$ 50,00"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#E8741A] focus:border-transparent outline-none"
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Resumo do Pedido */}
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4">Resumo do Pedido</h2>
-            <div className="space-y-3">
-              <div className="flex justify-between text-gray-600">
-                <span>Subtotal</span>
-                <span>R$ {total.toFixed(2)}</span>
-              </div>
-              {tipoPedido === 'delivery' && (
-                <div className="flex justify-between text-gray-600">
-                  <span>Taxa de Entrega</span>
-                  <span>R$ {taxaEntrega.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="border-t pt-3 flex justify-between text-xl font-bold text-gray-800">
-                <span>Total</span>
-                <span className="text-[#E8741A]">R$ {totalComTaxa.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Botão Finalizar */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#E8741A] hover:bg-[#d66515] text-white font-bold py-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                Finalizando...
-              </>
-            ) : (
-              <>
-                <CheckCircle size={24} />
-                Finalizar Pedido
-              </>
+            {formaPagamento === 'dinheiro' && (
+              <input
+                type="number"
+                value={trocoPara}
+                onChange={(e) => setTrocoPara(e.target.value)}
+                placeholder="Troco para quanto? (opcional)"
+                className="w-full px-4 py-3 bg-[#F5F5F5] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E61919] mt-3"
+              />
             )}
-          </button>
-        </form>
-      </div>
+          </div>
+        </section>
+
+        {/* Resumo */}
+        <section className="card p-5">
+          <h2 className="text-lg font-bold mb-4">Resumo</h2>
+          <div className="space-y-2 mb-4">
+            <div className="flex justify-between text-gray-600">
+              <span>Subtotal</span>
+              <span>R$ {total.toFixed(2)}</span>
+            </div>
+            {tipoPedido === 'delivery' && (
+              <div className="flex justify-between text-gray-600">
+                <span>Entrega</span>
+                <span>R$ {taxaEntrega.toFixed(2)}</span>
+              </div>
+            )}
+          </div>
+          <div className="border-t pt-4 flex justify-between items-center">
+            <span className="text-lg font-bold">Total</span>
+            <span className="text-2xl font-bold text-[#E61919]">
+              R$ {totalComTaxa.toFixed(2)}
+            </span>
+          </div>
+        </section>
+
+        {/* Botão */}
+        <button
+          type="submit"
+          disabled={loading}
+          className="btn-primary w-full text-lg py-4 flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <div className="spinner !w-5 !h-5 !border-2"></div>
+              Finalizando...
+            </>
+          ) : (
+            <>
+              <CheckCircle size={24} />
+              Finalizar Pedido
+            </>
+          )}
+        </button>
+      </form>
+
+      <BottomNav />
     </div>
   );
 }

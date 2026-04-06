@@ -1,136 +1,204 @@
-import { useNavigate } from 'react-router-dom'
-import { useCart } from '../lib/CartContext'
-import { useState } from 'react'
-
-const UPSELLS = [
-  { id: 'up1', name: 'Pizza no Cone Chefa', price: 19.99, emoji: '🍕' },
-  { id: 'up2', name: 'Pizza no Cone Frango com Catupiry', price: 19.99, emoji: '🍕' },
-  { id: 'up3', name: 'Mini Cone de Fritas da Chefa', price: 6.99, emoji: '🍟' },
-  { id: 'up4', name: 'Coca-Cola Lata 350ml', price: 7.99, emoji: '🥤' },
-  { id: 'up5', name: 'Mini Hambúrguer da Chefa', price: 25.98, emoji: '🍔' },
-  { id: 'up6', name: 'Cone Grande de Fritas da Chefa', price: 9.99, emoji: '🍟' },
-  { id: 'up7', name: 'Guaraná Antarctica 350ml', price: 7.99, emoji: '🥤' },
-  { id: 'up8', name: 'Mini Cone de Bacon em Tiras', price: 9.99, emoji: '🥓' },
-]
+import { useNavigate } from 'react-router-dom';
+import { useCartStore } from '../store/cartStore';
+import { ArrowLeft, Plus, Minus, Trash2, ShoppingBag, Crown } from 'lucide-react';
+import BottomNav from '../components/BottomNav';
 
 export default function Cart() {
-  const { items, updateQty, removeItem, total, addItem } = useCart()
-  const navigate = useNavigate()
-  const [added, setAdded] = useState({})
+  const navigate = useNavigate();
+  const { items, removeItem, updateQuantity, total, clearCart } = useCartStore();
 
-  function handleUpsell(item) {
-    addItem({ ...item, qty: 1 })
-    setAdded(prev => ({ ...prev, [item.id]: (prev[item.id] || 0) + 1 }))
+  const handleUpdateQuantity = (itemId, newQuantity) => {
+    if (newQuantity === 0) {
+      removeItem(itemId);
+    } else {
+      updateQuantity(itemId, newQuantity);
+    }
+  };
+
+  if (items.length === 0) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F5] pb-24">
+        {/* Header */}
+        <header className="bg-white shadow-sm sticky top-0 z-40">
+          <div className="container-mobile py-4 flex items-center gap-4">
+            <button onClick={() => navigate(-1)}>
+              <ArrowLeft size={24} className="text-[#1A1A1A]" />
+            </button>
+            <h1 className="text-xl font-bold">Carrinho</h1>
+          </div>
+        </header>
+
+        {/* Empty State */}
+        <div className="container-mobile flex flex-col items-center justify-center py-20 text-center">
+          <div className="w-32 h-32 bg-gray-100 rounded-full flex items-center justify-center mb-6">
+            <ShoppingBag size={48} className="text-gray-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Carrinho Vazio</h2>
+          <p className="text-gray-500 mb-6">Adicione produtos deliciosos ao seu carrinho!</p>
+          <button
+            onClick={() => navigate('/')}
+            className="btn-primary"
+          >
+            Ver Cardápio
+          </button>
+        </div>
+
+        <BottomNav />
+      </div>
+    );
   }
 
-  if (items.length === 0) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px', gap: '16px' }}>
-      <div style={{ fontSize: '64px' }}>🛒</div>
-      <h2 style={{ fontSize: '20px', fontWeight: '700' }}>Carrinho vazio</h2>
-      <p style={{ color: '#777', textAlign: 'center' }}>Adicione itens do cardápio para continuar</p>
-      <button className="btn-primary" style={{ maxWidth: '280px' }} onClick={() => navigate('/')}>Ver cardápio</button>
-    </div>
-  )
-
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: '120px' }}>
-
-      <div style={{ background: 'linear-gradient(135deg, #8B1A0A, #E8741A)', padding: '20px 16px', color: 'white', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <button onClick={() => navigate('/')} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', width: '36px', height: '36px', borderRadius: '50%', fontSize: '18px', cursor: 'pointer' }}>←</button>
-        <h1 style={{ fontSize: '20px', fontWeight: '800' }}>Meu Carrinho</h1>
-      </div>
-
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
-        {items.map((item, idx) => (
-          <div key={idx} className="card" style={{ padding: '14px' }}>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-              <div style={{ width: '56px', height: '56px', borderRadius: '10px', background: '#E8741A22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>🍕</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: '700', fontSize: '14px', marginBottom: '2px' }}>{item.name}</p>
-                {item.extras?.length > 0 && (
-                  <p style={{ fontSize: '12px', color: '#E8741A', marginBottom: '2px' }}>+ {item.extras.map(e => e.name).join(', ')}</p>
-                )}
-                {item.flavors?.length > 0 && (
-                  <p style={{ fontSize: '12px', color: '#777', marginBottom: '2px' }}>Sabores: {item.flavors.join(', ')}</p>
-                )}
-                {item.observation && (
-                  <p style={{ fontSize: '12px', color: '#777', fontStyle: 'italic', marginBottom: '4px' }}>Obs: {item.observation}</p>
-                )}
-                <p style={{ fontSize: '15px', fontWeight: '800', color: '#E8741A' }}>
-                  R$ {((item.price + (item.extras?.reduce((s, e) => s + e.price, 0) || 0)) * item.qty).toFixed(2).replace('.', ',')}
-                </p>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button onClick={() => updateQty(item.id, item.qty - 1)} style={{ width: '30px', height: '30px', borderRadius: '50%', background: item.qty === 1 ? '#ffeeee' : '#f0f0f0', border: 'none', fontSize: '16px', cursor: 'pointer', fontWeight: '700', color: item.qty === 1 ? '#e74c3c' : '#333' }}>−</button>
-                  <span style={{ fontWeight: '700', minWidth: '20px', textAlign: 'center' }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.id, item.qty + 1)} style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#E8741A', border: 'none', color: 'white', fontSize: '16px', cursor: 'pointer', fontWeight: '700' }}>+</button>
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen bg-[#F5F5F5] pb-24">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="container-mobile py-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => navigate(-1)}>
+              <ArrowLeft size={24} className="text-[#1A1A1A]" />
+            </button>
+            <h1 className="text-xl font-bold">Carrinho</h1>
           </div>
-        ))}
+          <button
+            onClick={clearCart}
+            className="text-sm text-[#E61919] font-medium"
+          >
+            Limpar
+          </button>
+        </div>
+      </header>
 
-        {/* UPSELL FUNCIONANDO */}
-        <div style={{ background: 'white', borderRadius: '16px', padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-          <p style={{ fontWeight: '800', fontSize: '15px', marginBottom: '4px' }}>🔥 Adicionar mais ao pedido</p>
-          <p style={{ fontSize: '12px', color: '#777', marginBottom: '12px' }}>Clique para adicionar — o valor entra no total automaticamente</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {UPSELLS.map((u) => (
-              <div key={u.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: added[u.id] ? '#F0FFF4' : '#FFF8F4', borderRadius: '10px', border: `1.5px ${added[u.id] ? 'solid #1D9E75' : 'dashed #E8741A'}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '20px' }}>{u.emoji}</span>
-                  <div>
-                    <p style={{ fontSize: '13px', fontWeight: '600', color: '#333' }}>{u.name}</p>
-                    <p style={{ fontSize: '12px', color: '#E8741A', fontWeight: '700' }}>R$ {u.price.toFixed(2).replace('.', ',')}</p>
+      <div className="container-mobile py-6 space-y-6">
+        {/* Lista de Itens */}
+        <section>
+          <h2 className="text-lg font-bold mb-4">Seus Itens ({items.length})</h2>
+          <div className="space-y-3">
+            {items.map((item) => (
+              <div key={item.id} className="card p-4 animate-slide-up">
+                <div className="flex gap-4">
+                  {/* Imagem */}
+                  <div className="w-20 h-20 bg-gray-100 rounded-xl flex-shrink-0 overflow-hidden">
+                    {item.imagem_url ? (
+                      <img
+                        src={item.imagem_url}
+                        alt={item.nome}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-2xl">
+                        🍕
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {added[u.id] > 0 && (
-                    <span style={{ background: '#1D9E75', color: 'white', borderRadius: '20px', padding: '2px 8px', fontSize: '12px', fontWeight: '700' }}>{added[u.id]}x</span>
-                  )}
-                  <button
-                    onClick={() => handleUpsell(u)}
-                    style={{ background: '#E8741A', color: 'white', border: 'none', borderRadius: '20px', padding: '8px 16px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', whiteSpace: 'nowrap' }}
-                  >
-                    + Adicionar
-                  </button>
+
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-sm mb-1 line-clamp-1">{item.nome}</h3>
+                    {item.tamanho && (
+                      <p className="text-xs text-gray-500 mb-1">Tamanho: {item.tamanho}</p>
+                    )}
+                    {item.adicionais && item.adicionais.length > 0 && (
+                      <p className="text-xs text-gray-500 mb-2">
+                        + {item.adicionais.map(a => a.nome).join(', ')}
+                      </p>
+                    )}
+                    <p className="text-lg font-bold text-[#E61919]">
+                      R$ {(item.preco * item.quantidade).toFixed(2)}
+                    </p>
+                  </div>
+
+                  {/* Controles */}
+                  <div className="flex flex-col items-end justify-between">
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="text-gray-400 hover:text-[#E61919] transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+
+                    <div className="flex items-center gap-2 bg-[#F5F5F5] rounded-full px-2 py-1">
+                      <button
+                        onClick={() => handleUpdateQuantity(item.id, item.quantidade - 1)}
+                        className="text-[#E61919] font-bold"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <span className="font-semibold text-sm w-6 text-center">
+                        {item.quantidade}
+                      </span>
+                      <button
+                        onClick={() => handleUpdateQuantity(item.id, item.quantidade + 1)}
+                        className="text-[#E61919] font-bold"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        {/* RESUMO */}
-        <div className="card" style={{ padding: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px', color: '#777' }}>
-            <span>Subtotal ({items.reduce((s, i) => s + i.qty, 0)} itens)</span>
-            <span>R$ {total.toFixed(2).replace('.', ',')}</span>
+        {/* Banner Clube */}
+        <section>
+          <div className="bg-gradient-to-r from-[#1A1A1A] to-[#2d2d2d] rounded-2xl p-5 text-white">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <Crown size={32} className="text-[#FFD700]" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-bold text-lg">Clube da Chefa</h3>
+                  <span className="premium-badge text-xs">VIP</span>
+                </div>
+                <p className="text-sm opacity-90 mb-3">
+                  Ganhe <span className="text-[#FFD700] font-bold">10% OFF</span> em todos os pedidos + frete grátis
+                </p>
+                <button
+                  onClick={() => navigate('/clube')}
+                  className="bg-[#FFD700] text-[#1A1A1A] px-4 py-2 rounded-full font-semibold text-sm hover:bg-[#ffd000] transition-colors"
+                >
+                  Conhecer Clube
+                </button>
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '14px' }}>
-            <span style={{ color: '#777' }}>Taxa de entrega</span>
-            <span style={{ color: '#1D9E75', fontWeight: '700' }}>Grátis 🎉</span>
-          </div>
-          <div style={{ borderTop: '2px solid #eee', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '20px', fontWeight: '800' }}>
-            <span>Total</span>
-            <span style={{ color: '#E8741A' }}>R$ {total.toFixed(2).replace('.', ',')}</span>
-          </div>
-        </div>
+        </section>
 
-      </div>
+        {/* Resumo */}
+        <section className="card p-5">
+          <h2 className="text-lg font-bold mb-4">Resumo do Pedido</h2>
+          
+          <div className="space-y-3 mb-4">
+            <div className="flex justify-between text-gray-600">
+              <span>Subtotal</span>
+              <span>R$ {total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-gray-600">
+              <span>Taxa de entrega</span>
+              <span className="text-[#E61919] font-medium">Calcular no checkout</span>
+            </div>
+          </div>
 
-      {/* BOTÃO FINALIZAR */}
-      <div style={{ position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '480px', padding: '16px', background: 'white', borderTop: '1px solid #eee', zIndex: 50 }}>
+          <div className="border-t pt-4 flex justify-between items-center">
+            <span className="text-lg font-bold">Total</span>
+            <span className="text-2xl font-bold text-[#E61919]">
+              R$ {total.toFixed(2)}
+            </span>
+          </div>
+        </section>
+
+        {/* Botão Finalizar */}
         <button
-          className="btn-primary"
           onClick={() => navigate('/checkout')}
-          style={{ fontSize: '16px', fontWeight: '800', padding: '18px' }}
+          className="btn-primary w-full text-lg py-4"
         >
-          ✅ Finalizar pedido • R$ {total.toFixed(2).replace('.', ',')}
+          Finalizar Pedido
         </button>
       </div>
 
+      <BottomNav />
     </div>
-  )
+  );
 }

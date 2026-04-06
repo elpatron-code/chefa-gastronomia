@@ -1,103 +1,272 @@
-import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { useCart } from '../lib/CartContext'
-import ProductModal from '../components/ProductModal'
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
+import { useCartStore } from '../store/cartStore';
+import { MapPin, Search, ShoppingCart, Plus, Star, Flame, TrendingUp } from 'lucide-react';
+import BottomNav from '../components/BottomNav';
 
 export default function Home() {
-  const [categories, setCategories] = useState([])
-  const [products, setProducts] = useState([])
-  const [activeCategory, setActiveCategory] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState(null)
-  const { count, total } = useCart()
-  const navigate = useNavigate()
+  const navigate = useNavigate();
+  const { items, addItem } = useCartStore();
+  const [produtos, setProdutos] = useState([]);
+  const [categorias, setCategorias] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState(null);
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    carregarDados();
+  }, []);
 
-  async function loadData() {
-    const { data: cats } = await supabase.from('categories').select('*').eq('active', true).order('position')
-    const { data: prods } = await supabase.from('products').select('*').eq('active', true).order('position')
-    setCategories(cats || [])
-    setProducts(prods || [])
-    if (cats?.length > 0) setActiveCategory(cats[0].id)
-    setLoading(false)
+  const carregarDados = async () => {
+    setLoading(true);
+    
+    // Carregar categorias
+    const { data: cats } = await supabase
+      .from('categorias')
+      .select('*')
+      .eq('ativo', true)
+      .order('ordem');
+    
+    setCategorias(cats || []);
+
+    // Carregar produtos em destaque
+    const { data: prods } = await supabase
+      .from('produtos')
+      .select('*')
+      .eq('ativo', true)
+      .order('total_vendas', { ascending: false })
+      .limit(10);
+    
+    setProdutos(prods || []);
+    setLoading(false);
+  };
+
+  const produtosFiltrados = selectedCategory
+    ? produtos.filter(p => p.categoria_id === selectedCategory)
+    : produtos;
+
+  const handleAddToCart = (produto) => {
+    addItem({
+      id: produto.id,
+      nome: produto.nome,
+      preco: produto.preco,
+      imagem_url: produto.imagem_url,
+      quantidade: 1
+    });
+  };
+
+  const categoriaIcons = {
+    'Pizzas': '🍕',
+    'Hambúrgueres': '🍔',
+    'Bebidas': '🥤',
+    'Sobremesas': '🍰',
+    'Combos': '🎁'
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center">
+        <div className="spinner"></div>
+      </div>
+    );
   }
 
-  const filtered = activeCategory ? products.filter(p => p.category_id === activeCategory) : products
-
   return (
-    <div style={{ minHeight: '100vh', paddingBottom: count > 0 ? '100px' : '20px' }}>
+    <div className="min-h-screen bg-[#F5F5F5] pb-24">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-40">
+        <div className="container-mobile py-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <MapPin size={20} className="text-[#E61919]" />
+              <div>
+                <p className="text-xs text-gray-500">Entregar em</p>
+                <p className="font-semibold text-sm">Araxá, MG</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => navigate('/carrinho')}
+              className="relative"
+            >
+              <ShoppingCart size={24} className="text-[#1A1A1A]" />
+              {items.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-[#E61919] text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {items.length}
+                </span>
+              )}
+            </button>
+          </div>
 
-      <div style={{ background: 'linear-gradient(135deg, #8B1A0A 0%, #E8741A 100%)', padding: '20px 16px 24px', color: 'white' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>👩‍🍳</div>
-          <div>
-            <h1 style={{ fontSize: '22px', fontWeight: '800' }}>Chefa Gastronomia</h1>
-            <p style={{ fontSize: '13px', opacity: 0.9 }}>O melhor jeito de comer pizza 🍕</p>
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+            <input
+              type="text"
+              placeholder="Buscar pizzas, hambúrgueres..."
+              className="w-full pl-11 pr-4 py-3 bg-[#F5F5F5] rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-[#E61919]"
+            />
           </div>
         </div>
-        <div style={{ background: 'rgba(255,255,255,0.15)', borderRadius: '10px', padding: '10px 14px', display: 'flex', gap: '16px', fontSize: '13px' }}>
-          <span>⏱ 40–50 min</span>
-          <span>⭐ 4.7</span>
-          <span>🛵 Delivery grátis</span>
-        </div>
-      </div>
+      </header>
 
-      <div style={{ background: 'white', padding: '12px 0', position: 'sticky', top: 0, zIndex: 10, borderBottom: '1px solid #eee', overflowX: 'auto', display: 'flex', gap: '8px', paddingLeft: '16px' }}>
-        {categories.map(cat => (
-          <button key={cat.id} onClick={() => setActiveCategory(cat.id)}
-            style={{ whiteSpace: 'nowrap', padding: '8px 16px', borderRadius: '20px', border: 'none', background: activeCategory === cat.id ? '#E8741A' : '#f0f0f0', color: activeCategory === cat.id ? 'white' : '#555', fontWeight: activeCategory === cat.id ? '700' : '500', fontSize: '13px', cursor: 'pointer' }}>
-            {cat.name}
+      {/* Banner Promocional */}
+      <section className="container-mobile py-6">
+        <div className="bg-gradient-to-r from-[#E61919] to-[#ff3333] rounded-3xl p-6 text-white relative overflow-hidden">
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <Flame size={20} />
+              <span className="text-sm font-semibold uppercase tracking-wide">Promoção</span>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Pizza no Cone</h2>
+            <p className="text-sm opacity-90 mb-4">Peça 2 e ganhe 15% OFF</p>
+            <button className="bg-white text-[#E61919] px-6 py-2 rounded-full font-semibold text-sm hover:bg-gray-100 transition-colors">
+              Aproveitar
+            </button>
+          </div>
+          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-white opacity-10 rounded-full transform translate-x-1/2"></div>
+        </div>
+      </section>
+
+      {/* Categorias */}
+      <section className="container-mobile py-4">
+        <h3 className="text-lg font-bold mb-4">Categorias</h3>
+        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className={`category-icon flex-shrink-0 ${!selectedCategory ? 'ring-2 ring-[#FFC107]' : ''}`}
+          >
+            <span className="text-3xl">⭐</span>
           </button>
-        ))}
-      </div>
+          {categorias.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`category-icon flex-shrink-0 ${selectedCategory === cat.id ? 'ring-2 ring-[#FFC107]' : ''}`}
+            >
+              <span className="text-3xl">{categoriaIcons[cat.nome] || cat.icone || '🍽️'}</span>
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-3 overflow-x-auto scrollbar-hide">
+          <button
+            onClick={() => setSelectedCategory(null)}
+            className={`px-4 py-1 rounded-full text-sm font-medium flex-shrink-0 transition-colors ${
+              !selectedCategory 
+                ? 'bg-[#FFC107] text-[#1A1A1A]' 
+                : 'bg-white text-gray-600'
+            }`}
+          >
+            Todos
+          </button>
+          {categorias.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-4 py-1 rounded-full text-sm font-medium flex-shrink-0 transition-colors ${
+                selectedCategory === cat.id 
+                  ? 'bg-[#FFC107] text-[#1A1A1A]' 
+                  : 'bg-white text-gray-600'
+              }`}
+            >
+              {cat.nome}
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <div style={{ padding: '16px' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-            <div style={{ fontSize: '32px', marginBottom: '8px' }}>⏳</div>
-            <p>Carregando cardápio...</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {filtered.map(product => (
-              <div key={product.id} className="card" onClick={() => setSelected(product)}
-                style={{ display: 'flex', padding: '14px', gap: '12px', cursor: 'pointer' }}>
-                <div style={{ width: '90px', height: '90px', borderRadius: '12px', background: 'linear-gradient(135deg, #E8741A22, #E8741A44)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-                  {product.image_url
-                    ? <img src={product.image_url} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: '36px' }}>🍕</span>}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ fontSize: '15px', fontWeight: '700', marginBottom: '4px' }}>{product.name}</h3>
-                  {product.description && <p style={{ fontSize: '13px', color: '#777', marginBottom: '8px', lineHeight: '1.4' }}>{product.description}</p>}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '17px', fontWeight: '800', color: '#E8741A' }}>
-                      R$ {product.price.toFixed(2).replace('.', ',')}
-                    </span>
-                    <button onClick={e => { e.stopPropagation(); setSelected(product) }}
-                      style={{ background: '#E8741A', color: 'white', width: '36px', height: '36px', borderRadius: '50%', fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}>+</button>
+      {/* Mais Vendidos */}
+      <section className="container-mobile py-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <TrendingUp size={20} className="text-[#E61919]" />
+            Mais Vendidos
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {produtosFiltrados.map((produto) => (
+            <div key={produto.id} className="card overflow-hidden animate-slide-up">
+              {/* Imagem */}
+              <div className="aspect-square bg-gray-100 relative">
+                {produto.imagem_url ? (
+                  <img
+                    src={produto.imagem_url}
+                    alt={produto.nome}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-4xl">
+                    🍕
                   </div>
+                )}
+                {produto.preco_promocional && (
+                  <span className="absolute top-2 right-2 bg-[#FFC107] text-[#1A1A1A] px-2 py-1 rounded-full text-xs font-bold">
+                    PROMO
+                  </span>
+                )}
+              </div>
+
+              {/* Info */}
+              <div className="p-3">
+                <h4 className="font-semibold text-sm mb-1 line-clamp-2">{produto.nome}</h4>
+                {produto.descricao && (
+                  <p className="text-xs text-gray-500 line-clamp-1 mb-2">{produto.descricao}</p>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <div>
+                    {produto.preco_promocional ? (
+                      <>
+                        <p className="text-xs text-gray-400 line-through">
+                          R$ {produto.preco.toFixed(2)}
+                        </p>
+                        <p className="text-lg font-bold text-[#E61919]">
+                          R$ {produto.preco_promocional.toFixed(2)}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-lg font-bold text-[#E61919]">
+                        R$ {produto.preco.toFixed(2)}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <button
+                    onClick={() => handleAddToCart(produto)}
+                    className="bg-[#E61919] text-white p-2 rounded-full hover:bg-[#cc1414] transition-colors"
+                  >
+                    <Plus size={20} />
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {count > 0 && (
-        <div style={{ position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)', width: 'calc(100% - 32px)', maxWidth: '448px', zIndex: 100 }}>
-          <button onClick={() => navigate('/carrinho')}
-            style={{ background: '#E8741A', color: 'white', width: '100%', padding: '16px 20px', borderRadius: '14px', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '15px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 20px rgba(232,116,26,0.5)' }}>
-            <span style={{ background: 'rgba(255,255,255,0.25)', borderRadius: '8px', padding: '4px 10px', fontSize: '14px' }}>{count} {count === 1 ? 'item' : 'itens'}</span>
-            <span>Ver carrinho</span>
-            <span>R$ {total.toFixed(2).replace('.', ',')}</span>
-          </button>
+            </div>
+          ))}
         </div>
-      )}
+      </section>
 
-      {selected && <ProductModal product={selected} onClose={() => setSelected(null)} />}
+      {/* Clube da Chefa Banner */}
+      <section className="container-mobile py-6">
+        <div className="bg-gradient-to-r from-[#1A1A1A] via-[#2d2d2d] to-[#1A1A1A] rounded-3xl p-6 text-white relative overflow-hidden">
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <Star size={20} className="text-[#FFD700]" />
+              <span className="premium-badge">VIP</span>
+            </div>
+            <h2 className="text-2xl font-bold mb-2">Clube da Chefa</h2>
+            <p className="text-sm opacity-90 mb-4">Descontos exclusivos e frete grátis</p>
+            <button 
+              onClick={() => navigate('/clube')}
+              className="bg-[#FFD700] text-[#1A1A1A] px-6 py-2 rounded-full font-semibold text-sm hover:bg-[#ffd000] transition-colors"
+            >
+              Ser Membro
+            </button>
+          </div>
+          <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[#FFD700] opacity-10 rounded-full transform translate-x-1/2"></div>
+        </div>
+      </section>
+
+      {/* Bottom Navigation */}
+      <BottomNav />
     </div>
-  )
+  );
 }
