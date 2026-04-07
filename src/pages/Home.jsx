@@ -20,7 +20,6 @@ export default function Home() {
   const carregarDados = async () => {
     setLoading(true);
     
-    // Carregar categorias
     const { data: cats } = await supabase
       .from('categorias')
       .select('*')
@@ -29,13 +28,12 @@ export default function Home() {
     
     setCategorias(cats || []);
 
-    // Carregar produtos em destaque
     const { data: prods } = await supabase
       .from('produtos')
       .select('*')
       .eq('ativo', true)
       .order('total_vendas', { ascending: false })
-      .limit(10);
+      .limit(20);
     
     setProdutos(prods || []);
     setLoading(false);
@@ -73,7 +71,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] pb-24">
-      {/* Header */}
+      {/* Header Sticky */}
       <header className="bg-white shadow-sm sticky top-0 z-40">
         <div className="container-mobile py-4">
           <div className="flex items-center justify-between mb-3">
@@ -97,7 +95,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Search Bar */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
             <input
@@ -109,7 +106,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Banner Promocional */}
+      {/* Banner Promocional VERMELHO */}
       <section className="container-mobile py-6">
         <div className="bg-gradient-to-r from-[#E61919] to-[#ff3333] rounded-3xl p-6 text-white relative overflow-hidden">
           <div className="relative z-10">
@@ -127,7 +124,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Categorias */}
+      {/* Categorias Circulares */}
       <section className="container-mobile py-4">
         <h3 className="text-lg font-bold mb-4">Categorias</h3>
         <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
@@ -174,7 +171,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Mais Vendidos */}
+      {/* Grid de Produtos */}
       <section className="container-mobile py-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold flex items-center gap-2">
@@ -183,68 +180,73 @@ export default function Home() {
           </h3>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          {produtosFiltrados.map((produto) => (
-            <div key={produto.id} className="card overflow-hidden animate-slide-up">
-              {/* Imagem */}
-              <div className="aspect-square bg-gray-100 relative">
-                {produto.imagem_url ? (
-                  <img
-                    src={produto.imagem_url}
-                    alt={produto.nome}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl">
-                    🍕
-                  </div>
-                )}
-                {produto.preco_promocional && (
-                  <span className="absolute top-2 right-2 bg-[#FFC107] text-[#1A1A1A] px-2 py-1 rounded-full text-xs font-bold">
-                    PROMO
-                  </span>
-                )}
-              </div>
+        {produtosFiltrados.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-gray-500">Nenhum produto encontrado</p>
+            <p className="text-sm text-gray-400 mt-2">Cadastre produtos no painel admin</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            {produtosFiltrados.map((produto) => (
+              <div key={produto.id} className="card overflow-hidden animate-slide-up">
+                <div className="aspect-square bg-gray-100 relative">
+                  {produto.imagem_url ? (
+                    <img
+                      src={produto.imagem_url}
+                      alt={produto.nome}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-4xl">
+                      🍕
+                    </div>
+                  )}
+                  {produto.preco_promocional && (
+                    <span className="absolute top-2 right-2 bg-[#FFC107] text-[#1A1A1A] px-2 py-1 rounded-full text-xs font-bold">
+                      PROMO
+                    </span>
+                  )}
+                </div>
 
-              {/* Info */}
-              <div className="p-3">
-                <h4 className="font-semibold text-sm mb-1 line-clamp-2">{produto.nome}</h4>
-                {produto.descricao && (
-                  <p className="text-xs text-gray-500 line-clamp-1 mb-2">{produto.descricao}</p>
-                )}
-                
-                <div className="flex items-center justify-between">
-                  <div>
-                    {produto.preco_promocional ? (
-                      <>
-                        <p className="text-xs text-gray-400 line-through">
+                <div className="p-3">
+                  <h4 className="font-semibold text-sm mb-1 line-clamp-2">{produto.nome}</h4>
+                  {produto.descricao && (
+                    <p className="text-xs text-gray-500 line-clamp-1 mb-2">{produto.descricao}</p>
+                  )}
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      {produto.preco_promocional ? (
+                        <>
+                          <p className="text-xs text-gray-400 line-through">
+                            R$ {produto.preco.toFixed(2)}
+                          </p>
+                          <p className="text-lg font-bold text-[#E61919]">
+                            R$ {produto.preco_promocional.toFixed(2)}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-lg font-bold text-[#E61919]">
                           R$ {produto.preco.toFixed(2)}
                         </p>
-                        <p className="text-lg font-bold text-[#E61919]">
-                          R$ {produto.preco_promocional.toFixed(2)}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-lg font-bold text-[#E61919]">
-                        R$ {produto.preco.toFixed(2)}
-                      </p>
-                    )}
+                      )}
+                    </div>
+                    
+                    <button
+                      onClick={() => handleAddToCart(produto)}
+                      className="bg-[#E61919] text-white p-2 rounded-full hover:bg-[#cc1414] transition-colors"
+                    >
+                      <Plus size={20} />
+                    </button>
                   </div>
-                  
-                  <button
-                    onClick={() => handleAddToCart(produto)}
-                    className="bg-[#E61919] text-white p-2 rounded-full hover:bg-[#cc1414] transition-colors"
-                  >
-                    <Plus size={20} />
-                  </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Clube da Chefa Banner */}
+      {/* Banner Clube */}
       <section className="container-mobile py-6">
         <div className="bg-gradient-to-r from-[#1A1A1A] via-[#2d2d2d] to-[#1A1A1A] rounded-3xl p-6 text-white relative overflow-hidden">
           <div className="relative z-10">
@@ -265,7 +267,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Bottom Navigation */}
       <BottomNav />
     </div>
   );
